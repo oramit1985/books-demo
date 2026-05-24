@@ -21,3 +21,23 @@ Structure your review response using this template to ensure it remains scannabl
 * **[File / Component Name]**: Short description of the bug.
 ```[language]
   // Anti-pattern code example or reference
+```
+* **Suggested Fix**: Explain the fix concisely.
+```[language]
+  // Corrected code example
+```
+
+### ⚠️ Warnings (Should Fix)
+*Important issues that are not immediate blockers but should be addressed soon: deprecated APIs, missing error handling at boundaries, unclear ownership of state, test gaps for critical paths.*
+* **[File / Component Name]**: Description and recommended fix.
+
+### 💡 Suggestions (Consider)
+*Low-priority, non-blocking improvements: naming, small refactors, idiomatic patterns, documentation gaps. Skip if the list would be trivial.*
+* **[File / Component Name]**: Suggestion and rationale.
+
+### ✅ Checklist
+Before approving, confirm:
+- [ ] No critical issues remain unresolved
+- [ ] New logic has test coverage (or existing tests cover it)
+- [ ] No secrets, tokens, or PII introduced
+- [ ] No new external dependencies without justification
