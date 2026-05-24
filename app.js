@@ -48,7 +48,9 @@ if (!books.length) {
 
 function persist() { localStorage.setItem(STORAGE_KEY, JSON.stringify(books)); }
 function getAll()    { return books; }
-function getById(id) { return books.find(b => b.id === id) || null; }
+function getById(id) {
+  return books.find(b => b.id === id) || null;
+}
 
 function create(data) {
   const book = { id: crypto.randomUUID(), ...data };

@@ -1,0 +1,32 @@
+{
+  "name": "books-app",
+  "version": "1.0.0",
+  "description": "A static books management application with full CRUD capabilities.",
+  "main": "app.js",
+  "scripts": {
+    "test": "jest --coverage"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "projects": [
+      {
+        "displayName": "unit",
+        "testEnvironment": "node",
+        "testMatch": ["<rootDir>/tests/pure-functions.test.js"]
+      },
+      {
+        "displayName": "dom",
+        "testEnvironment": "jest-environment-jsdom",
+        "testMatch": ["<rootDir>/tests/dom-integration.test.js"],
+        "setupFiles": ["<rootDir>/tests/jest.setup.dom.js"]
+      }
+    ]
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "jest": "^30.4.2",
+    "jest-environment-jsdom": "^30.4.1"
+  }
+}

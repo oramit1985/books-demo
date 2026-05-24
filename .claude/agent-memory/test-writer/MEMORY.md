@@ -1,0 +1,2 @@
+- [Project: Books App](project-books-app.md) — static vanilla-JS bookshelf app, no bundler/framework, localStorage-backed CRUD
+- [User Profile](user-profile.md) — works on personal projects; books-app context
