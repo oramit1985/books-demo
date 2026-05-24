@@ -7,84 +7,166 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <header>
-    <h1>Books Manager</h1>
-    <button id="btn-add" class="btn btn-primary">+ Add Book</button>
+
+  <!-- Header -->
+  <header class="header">
+    <div class="header-inner">
+      <div class="header-brand">
+        <svg class="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+          <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+        </svg>
+        <span>BookShelf</span>
+      </div>
+      <button id="btn-add" class="btn btn-add">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Add Book
+      </button>
+    </div>
   </header>
 
-  <main>
-    <div id="search-bar">
-      <input type="text" id="search" placeholder="Search by title or author..." />
+  <!-- Toolbar -->
+  <div class="toolbar">
+    <div class="toolbar-inner">
+      <div class="search-wrap">
+        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        <input type="text" id="search" placeholder="Search by title or author…" autocomplete="off" />
+        <button id="search-clear" class="search-clear hidden" aria-label="Clear search">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div id="book-count" class="book-count">0 books</div>
     </div>
-    <div id="books-grid"></div>
-    <p id="empty-state" class="hidden">No books yet. Add your first one!</p>
+  </div>
+
+  <!-- Main -->
+  <main class="main">
+    <div id="books-grid" class="books-grid"></div>
+
+    <!-- Empty state -->
+    <div id="empty-state" class="empty-state hidden">
+      <svg class="empty-icon" viewBox="0 0 80 80" fill="none">
+        <rect x="8" y="10" width="42" height="56" rx="4" fill="#e0e7ff" stroke="#6366f1" stroke-width="2"/>
+        <rect x="18" y="10" width="42" height="56" rx="4" fill="#eef2ff" stroke="#6366f1" stroke-width="2"/>
+        <line x1="26" y1="28" x2="50" y2="28" stroke="#a5b4fc" stroke-width="2" stroke-linecap="round"/>
+        <line x1="26" y1="36" x2="50" y2="36" stroke="#a5b4fc" stroke-width="2" stroke-linecap="round"/>
+        <line x1="26" y1="44" x2="40" y2="44" stroke="#a5b4fc" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+      <h2 id="empty-title">Your shelf is empty</h2>
+      <p id="empty-subtitle">Add your first book to get started.</p>
+      <button class="btn btn-primary" id="empty-add">Add a Book</button>
+    </div>
   </main>
 
   <!-- Detail Modal -->
-  <div id="modal-detail" class="modal hidden">
-    <div class="modal-content">
-      <button class="modal-close" data-close="modal-detail">&times;</button>
-      <h2 id="detail-title"></h2>
-      <p class="detail-meta"><span id="detail-author"></span> &bull; <span id="detail-year"></span></p>
-      <p class="detail-genre" id="detail-genre"></p>
-      <p id="detail-description"></p>
-      <div class="modal-actions">
-        <button id="detail-edit" class="btn btn-primary">Edit</button>
-        <button id="detail-delete" class="btn btn-danger">Delete</button>
+  <div id="modal-detail" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-box">
+      <div class="modal-header" id="detail-header">
+        <div class="modal-header-text">
+          <span class="modal-tag" id="detail-genre-tag"></span>
+          <h2 id="detail-title"></h2>
+          <p class="detail-byline"><span id="detail-author"></span><span id="detail-year-sep"> · </span><span id="detail-year"></span></p>
+        </div>
+        <button class="modal-close" data-close="modal-detail" aria-label="Close">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <p id="detail-description" class="detail-desc"></p>
+      </div>
+      <div class="modal-footer">
+        <button id="detail-edit" class="btn btn-primary">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          Edit
+        </button>
+        <button id="detail-delete" class="btn btn-danger-outline">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+          Delete
+        </button>
       </div>
     </div>
   </div>
 
   <!-- Form Modal -->
-  <div id="modal-form" class="modal hidden">
-    <div class="modal-content">
-      <button class="modal-close" data-close="modal-form">&times;</button>
-      <h2 id="form-title">Add Book</h2>
-      <form id="book-form" novalidate>
-        <input type="hidden" id="form-id" />
-        <div class="field">
-          <label for="form-book-title">Title *</label>
-          <input type="text" id="form-book-title" required />
-        </div>
-        <div class="field">
-          <label for="form-author">Author *</label>
-          <input type="text" id="form-author" required />
-        </div>
-        <div class="field-row">
+  <div id="modal-form" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-box">
+      <div class="modal-header modal-header--plain">
+        <h2 id="form-heading">Add Book</h2>
+        <button class="modal-close" data-close="modal-form" aria-label="Close">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <form id="book-form" novalidate>
+          <input type="hidden" id="form-id" />
           <div class="field">
-            <label for="form-year">Year</label>
-            <input type="number" id="form-year" min="1" max="2100" />
+            <label for="form-book-title">Title <span class="req">*</span></label>
+            <input type="text" id="form-book-title" placeholder="e.g. The Great Gatsby" required />
+            <span class="field-error">Title is required</span>
           </div>
           <div class="field">
-            <label for="form-genre">Genre</label>
-            <input type="text" id="form-genre" />
+            <label for="form-author">Author <span class="req">*</span></label>
+            <input type="text" id="form-author" placeholder="e.g. F. Scott Fitzgerald" required />
+            <span class="field-error">Author is required</span>
           </div>
-        </div>
-        <div class="field">
-          <label for="form-description">Description</label>
-          <textarea id="form-description" rows="4"></textarea>
-        </div>
-        <div class="modal-actions">
-          <button type="submit" class="btn btn-primary">Save</button>
-          <button type="button" class="btn btn-secondary" data-close="modal-form">Cancel</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <!-- Confirm Delete -->
-  <div id="modal-confirm" class="modal hidden">
-    <div class="modal-content modal-content--sm">
-      <h2>Delete Book</h2>
-      <p>Are you sure you want to delete <strong id="confirm-book-title"></strong>?</p>
-      <div class="modal-actions">
-        <button id="confirm-yes" class="btn btn-danger">Delete</button>
-        <button class="btn btn-secondary" data-close="modal-confirm">Cancel</button>
+          <div class="field-row">
+            <div class="field">
+              <label for="form-year">Year</label>
+              <input type="number" id="form-year" placeholder="e.g. 1925" min="1" max="2100" />
+            </div>
+            <div class="field">
+              <label for="form-genre">Genre</label>
+              <input type="text" id="form-genre" placeholder="e.g. Fiction" list="genre-suggestions" />
+              <datalist id="genre-suggestions">
+                <option value="Fiction"/>
+                <option value="Non-Fiction"/>
+                <option value="Science Fiction"/>
+                <option value="Mystery"/>
+                <option value="Thriller"/>
+                <option value="Romance"/>
+                <option value="Biography"/>
+                <option value="History"/>
+                <option value="Fantasy"/>
+                <option value="Self-Help"/>
+              </datalist>
+            </div>
+          </div>
+          <div class="field">
+            <label for="form-description">Description</label>
+            <textarea id="form-description" rows="3" placeholder="A brief summary…"></textarea>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="submit" form="book-form" class="btn btn-primary" id="form-submit">Save Book</button>
+        <button type="button" class="btn btn-ghost" data-close="modal-form">Cancel</button>
       </div>
     </div>
   </div>
 
+  <!-- Confirm Delete -->
+  <div id="modal-confirm" class="modal hidden" role="alertdialog" aria-modal="true">
+    <div class="modal-box modal-box--sm">
+      <div class="confirm-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+      </div>
+      <h2>Delete Book?</h2>
+      <p>You’re about to delete <strong id="confirm-book-title"></strong>. This action cannot be undone.</p>
+      <div class="modal-footer modal-footer--center">
+        <button id="confirm-yes" class="btn btn-danger">Yes, Delete</button>
+        <button class="btn btn-ghost" data-close="modal-confirm">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Overlay -->
   <div id="overlay" class="hidden"></div>
+
+  <!-- Toasts -->
+  <div id="toast-container"></div>
+
   <script src="app.js"></script>
 </body>
 </html>
