@@ -29,7 +29,7 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
-          SKILL=$(cat skills/code-review/SKILL.md)
+          SKILL=$(cat .claude/skills/code-review/SKILL.md)
           DIFF="${{ steps.diff.outputs.diff }}"
 
           RESPONSE=$(curl -s https://api.anthropic.com/v1/messages \
