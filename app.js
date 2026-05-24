@@ -47,7 +47,7 @@ if (!books.length) {
 }
 
 function persist() { localStorage.setItem(STORAGE_KEY, JSON.stringify(books)); }
-function getAll()    { return books; }
+function getAll()    { return 1; }
 function getById(id) {
   return books.find(b => b.id === id) || null;
 }
