@@ -1,4 +1,4 @@
-name: AI Code Review
+name: AI Code Review + Tests
 
 on:
   pull_request:
@@ -29,7 +29,7 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
-          SKILL=$(cat .claude/skills/code-review/SKILL.md)
+          SKILL=$(cat skills/code-review/SKILL.md)
           DIFF="${{ steps.diff.outputs.diff }}"
 
           RESPONSE=$(curl -s https://api.anthropic.com/v1/messages \
@@ -57,3 +57,113 @@ jobs:
         run: |
           gh pr comment ${{ github.event.pull_request.number }} \
             --body "${{ steps.review.outputs.review }}"
+
+  run-tests:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Run Jest Tests
+        id: tests
+        run: |
+          npm test -- --json --outputFile=test-results.json || true
+
+      - name: Parse & Post Test Results
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PASSED=$(jq '.numPassedTests' test-results.json)
+          FAILED=$(jq '.numFailedTests' test-results.json)
+          TOTAL=$(jq '.numTotalTests' test-results.json)
+
+          if [ "$FAILED" -gt "0" ]; then
+            STATUS="❌ Tests Failed"
+          else
+            STATUS="✅ All Tests Passed"
+          fi
+
+          COMMENT="### $STATUS
+          | Total | Passed | Failed |
+          |-------|--------|--------|
+          | $TOTAL | $PASSED | $FAILED |"
+
+          gh pr comment ${{ github.event.pull_request.number }} \
+            --body "$COMMENT"
+
+          # Block merge if tests failed
+          if [ "$FAILED" -gt "0" ]; then
+            exit 1
+          fi
+
+#name: AI Code Review
+#
+#on:
+#  pull_request:
+#    types: [opened, synchronize]
+#
+#jobs:
+#  code-review:
+#    runs-on: ubuntu-latest
+#    permissions:
+#      pull-requests: write
+#      contents: read
+#
+#    steps:
+#      - uses: actions/checkout@v4
+#
+#      - name: Get PR Diff
+#        id: diff
+#        env:
+#          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+#        run: |
+#          PR_DIFF=$(gh pr diff ${{ github.event.pull_request.number }})
+#          echo "diff<<EOF" >> $GITHUB_OUTPUT
+#          echo "$PR_DIFF" >> $GITHUB_OUTPUT
+#          echo "EOF" >> $GITHUB_OUTPUT
+#
+#      - name: Run Claude Code Review
+#        id: review
+#        env:
+#          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+#        run: |
+#          SKILL=$(cat .claude/skills/code-review/SKILL.md)
+#          DIFF="${{ steps.diff.outputs.diff }}"
+#
+#          RESPONSE=$(curl -s https://api.anthropic.com/v1/messages \
+#            -H "x-api-key: $ANTHROPIC_API_KEY" \
+#            -H "anthropic-version: 2023-06-01" \
+#            -H "content-type: application/json" \
+#            -d "{
+#              \"model\": \"claude-sonnet-4-20250514\",
+#              \"max_tokens\": 4096,
+#              \"system\": $(echo "$SKILL" | jq -Rs .),
+#              \"messages\": [{
+#                \"role\": \"user\",
+#                \"content\": $(echo "Please review the following PR diff:\n\n$DIFF" | jq -Rs .)
+#              }]
+#            }")
+#
+#          REVIEW=$(echo $RESPONSE | jq -r '.content[0].text')
+#          echo "review<<EOF" >> $GITHUB_OUTPUT
+#          echo "$REVIEW" >> $GITHUB_OUTPUT
+#          echo "EOF" >> $GITHUB_OUTPUT
+#
+#      - name: Post Review Comment
+#        env:
+#          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+#        run: |
+#          gh pr comment ${{ github.event.pull_request.number }} \
+#            --body "${{ steps.review.outputs.review }}"
