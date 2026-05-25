@@ -21,13 +21,12 @@ jobs:
           gh pr diff ${{ github.event.pull_request.number }} > pr.diff
 
       - name: Run Claude Code Review
-        id: review
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           SKILL=$(cat .claude/skills/code-review/SKILL.md)
 
-          RESPONSE=$(curl -s https://api.anthropic.com/v1/messages \
+          curl -s https://api.anthropic.com/v1/messages \
             -H "x-api-key: $ANTHROPIC_API_KEY" \
             -H "anthropic-version: 2023-06-01" \
             -H "content-type: application/json" \
@@ -39,19 +38,14 @@ jobs:
                 \"role\": \"user\",
                 \"content\": $(cat pr.diff | jq -Rs .)
               }]
-            }")
-
-          REVIEW=$(echo $RESPONSE | jq -r '.content[0].text')
-          echo "review<<EOF" >> $GITHUB_OUTPUT
-          echo "$REVIEW" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+            }" | jq -r '.content[0].text' > review_body.txt
 
       - name: Post Review Comment
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh pr comment ${{ github.event.pull_request.number }} \
-            --body "${{ steps.review.outputs.review }}"
+            --body-file review_body.txt
 
   inline-review:
     runs-on: ubuntu-latest
@@ -100,7 +94,7 @@ jobs:
           echo "$COMMENTS" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-      - name: Delete previous bot inline comments
+      - name: Clear previous bot inline comments
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -143,4 +137,17 @@ jobs:
               }"
           done
 
-
+  call-pr-fixer:
+    needs: [code-review, inline-review]
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Trigger PR Fixer
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh workflow run pr-fixer.yml \
+            --repo ${{ github.repository }} \
+            -f pr_number=${{ github.event.pull_request.number }}

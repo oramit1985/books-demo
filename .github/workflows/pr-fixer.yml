@@ -1,9 +1,6 @@
 name: AI PR Fixer
 
 on:
-  workflow_run:
-    workflows: ["AI Code Review + Tests"]
-    types: [completed]
   workflow_dispatch:
     inputs:
       pr_number:
@@ -14,10 +11,10 @@ on:
 jobs:
   fix:
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'workflow_dispatch' || contains(fromJSON('["success","failure"]'), github.event.workflow_run.conclusion) }}
     permissions:
       contents: write
       pull-requests: write
+      workflows: write
 
     steps:
       - name: Get PR number and branch
@@ -25,15 +22,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            PR_NUMBER="${{ github.event.inputs.pr_number }}"
-          else
-            PR_NUMBER=$(gh api repos/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}/pulls \
-              --jq '.[0].number // empty')
-          fi
+          PR_NUMBER="${{ inputs.pr_number }}"
 
           if [ -z "$PR_NUMBER" ]; then
-            echo "No PR associated with this workflow run. Skipping."
+            echo "No PR number provided. Skipping."
             exit 0
           fi
 
@@ -167,6 +159,7 @@ jobs:
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git"
+
           git checkout -b "$FIX_BRANCH"
 
           # Write each fixed file
@@ -185,7 +178,10 @@ jobs:
               print(f"  Applied fix: {path}")
           PYEOF
 
-          git add -A
+          # Stage only the fixed files, not workflow temp artifacts
+          jq -r 'keys[]' fixes.json | while IFS= read -r file; do
+            git add "$file"
+          done
 
           if git diff --cached --quiet; then
             echo "No file changes after applying fixes — skipping PR creation."
@@ -193,11 +189,16 @@ jobs:
           fi
 
           git commit -m "fix: apply AI review suggestions for PR #${PR_NUMBER}"
-          git push origin "$FIX_BRANCH"
+          git push origin "$FIX_BRANCH" --force
 
-          gh pr create \
-            --title "fix: AI review suggestions for PR #${PR_NUMBER}" \
-            --body "$(cat <<EOF
+          # Open PR only if one doesn't already exist for this branch
+          EXISTING=$(gh pr list --repo ${{ github.repository }} --head "$FIX_BRANCH" --json number -q '.[0].number')
+          if [ -n "$EXISTING" ]; then
+            echo "PR #$EXISTING already exists for $FIX_BRANCH — skipping creation."
+          else
+            gh pr create \
+              --title "fix: AI review suggestions for PR #${PR_NUMBER}" \
+              --body "$(cat <<EOF
           ## AI Review Fixes
 
           Automated fixes generated from code review comments on PR #${PR_NUMBER}.
@@ -208,5 +209,6 @@ jobs:
           > Review the diff carefully before merging. AI-generated fixes should always be human-verified.
           EOF
           )" \
-            --base "$BASE_BRANCH" \
-            --head "$FIX_BRANCH"
+              --base "$BASE_BRANCH" \
+              --head "$FIX_BRANCH"
+          fi
