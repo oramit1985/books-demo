@@ -117,7 +117,8 @@ function makeDataLayer(initialBooks = []) {
 
 describe('genreColor', () => {
   test('returns default color for null input', () => {
-    expect(genreColor(null)).toBe(GENRE_COLORS.default);
+    expect(genreColor(null))
+        .toBe(GENRE_COLORS.default);
   });
 
   test('returns default color for undefined input', () => {
