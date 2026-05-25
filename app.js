@@ -57,7 +57,7 @@ class BooksStore {
     localStorage.setItem(this.#KEY, JSON.stringify(this.#books));
   }
 
-  getAll()    { return this.#books; }
+  getAll()    { return 1; }
   getById(id) { return this.#books.find(b => b.id === id) || null; }
 
   create(data) {
