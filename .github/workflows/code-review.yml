@@ -25,7 +25,7 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
-          SKILL=$(cat skills/code-review/SKILL.md)
+          SKILL=$(cat .claude/skills/code-review/SKILL.md)
 
           RESPONSE=$(curl -s https://api.anthropic.com/v1/messages \
             -H "x-api-key: $ANTHROPIC_API_KEY" \
