@@ -37,7 +37,7 @@ jobs:
             exit 0
           fi
 
-          BRANCH=$(gh pr view "$PR_NUMBER" --json headRefName -q '.headRefName')
+          BRANCH=$(gh pr view "$PR_NUMBER" --repo ${{ github.repository }} --json headRefName -q '.headRefName')
           echo "number=$PR_NUMBER" >> $GITHUB_OUTPUT
           echo "branch=$BRANCH"    >> $GITHUB_OUTPUT
 
