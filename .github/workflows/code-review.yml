@@ -153,12 +153,15 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          COMMENTS='${{ steps.inline.outputs.comments }}'
           PR_NUMBER=${{ github.event.pull_request.number }}
           SHA="${{ steps.sha.outputs.sha }}"
 
+          cat << 'ENDOFCOMMENTS' > comments.json
+          ${{ steps.inline.outputs.comments }}
+          ENDOFCOMMENTS
+
           # Strip markdown code fences if present
-          CLEAN=$(echo "$COMMENTS" | sed 's/```json//g' | sed 's/```//g' | tr -d '\r')
+          CLEAN=$(cat comments.json | sed 's/```json//g' | sed 's/```//g' | tr -d '\r')
 
           echo "$CLEAN" | jq -c '.[]' | while read comment; do
             FILE=$(echo $comment | jq -r '.path')
