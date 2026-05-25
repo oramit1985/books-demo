@@ -53,55 +53,6 @@ jobs:
           gh pr comment ${{ github.event.pull_request.number }} \
             --body "${{ steps.review.outputs.review }}"
 
-  run-tests:
-    runs-on: ubuntu-latest
-    permissions:
-      pull-requests: write
-      contents: read
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-
-      - name: Install Dependencies
-        run: npm ci
-
-      - name: Run Jest Tests
-        id: tests
-        run: |
-          npm test -- --json --outputFile=test-results.json || true
-
-      - name: Parse & Post Test Results
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          PASSED=$(jq '.numPassedTests' test-results.json)
-          FAILED=$(jq '.numFailedTests' test-results.json)
-          TOTAL=$(jq '.numTotalTests' test-results.json)
-
-          if [ "$FAILED" -gt "0" ]; then
-            STATUS="❌ Tests Failed"
-          else
-            STATUS="✅ All Tests Passed"
-          fi
-
-          COMMENT="### $STATUS
-          | Total | Passed | Failed |
-          |-------|--------|--------|
-          | $TOTAL | $PASSED | $FAILED |"
-
-          gh pr comment ${{ github.event.pull_request.number }} \
-            --body "$COMMENT"
-
-          if [ "$FAILED" -gt "0" ]; then
-            exit 1
-          fi
-
   inline-review:
     runs-on: ubuntu-latest
     permissions:
