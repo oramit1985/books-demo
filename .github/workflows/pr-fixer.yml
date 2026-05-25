@@ -14,7 +14,7 @@ on:
 jobs:
   fix:
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(fromJSON('["success","failure"]'), github.event.workflow_run.conclusion) }}
     permissions:
       contents: write
       pull-requests: write
