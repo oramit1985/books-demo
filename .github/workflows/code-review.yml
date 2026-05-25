@@ -15,14 +15,10 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Get PR Diff
-        id: diff
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          PR_DIFF=$(gh pr diff ${{ github.event.pull_request.number }})
-          echo "diff<<EOF" >> $GITHUB_OUTPUT
-          echo "$PR_DIFF" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          gh pr diff ${{ github.event.pull_request.number }} > pr.diff
 
       - name: Run Claude Code Review
         id: review
@@ -30,7 +26,6 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           SKILL=$(cat .claude/skills/code-review/SKILL.md)
-          DIFF="${{ steps.diff.outputs.diff }}"
 
           RESPONSE=$(curl -s https://api.anthropic.com/v1/messages \
             -H "x-api-key: $ANTHROPIC_API_KEY" \
@@ -42,7 +37,7 @@ jobs:
               \"system\": $(echo "$SKILL" | jq -Rs .),
               \"messages\": [{
                 \"role\": \"user\",
-                \"content\": $(echo "Please review the following PR diff:\n\n$DIFF" | jq -Rs .)
+                \"content\": $(cat pr.diff | jq -Rs .)
               }]
             }")
 
@@ -103,67 +98,85 @@ jobs:
           gh pr comment ${{ github.event.pull_request.number }} \
             --body "$COMMENT"
 
-          # Block merge if tests failed
           if [ "$FAILED" -gt "0" ]; then
             exit 1
           fi
 
-#name: AI Code Review
-#
-#on:
-#  pull_request:
-#    types: [opened, synchronize]
-#
-#jobs:
-#  code-review:
-#    runs-on: ubuntu-latest
-#    permissions:
-#      pull-requests: write
-#      contents: read
-#
-#    steps:
-#      - uses: actions/checkout@v4
-#
-#      - name: Get PR Diff
-#        id: diff
-#        env:
-#          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-#        run: |
-#          PR_DIFF=$(gh pr diff ${{ github.event.pull_request.number }})
-#          echo "diff<<EOF" >> $GITHUB_OUTPUT
-#          echo "$PR_DIFF" >> $GITHUB_OUTPUT
-#          echo "EOF" >> $GITHUB_OUTPUT
-#
-#      - name: Run Claude Code Review
-#        id: review
-#        env:
-#          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-#        run: |
-#          SKILL=$(cat .claude/skills/code-review/SKILL.md)
-#          DIFF="${{ steps.diff.outputs.diff }}"
-#
-#          RESPONSE=$(curl -s https://api.anthropic.com/v1/messages \
-#            -H "x-api-key: $ANTHROPIC_API_KEY" \
-#            -H "anthropic-version: 2023-06-01" \
-#            -H "content-type: application/json" \
-#            -d "{
-#              \"model\": \"claude-sonnet-4-20250514\",
-#              \"max_tokens\": 4096,
-#              \"system\": $(echo "$SKILL" | jq -Rs .),
-#              \"messages\": [{
-#                \"role\": \"user\",
-#                \"content\": $(echo "Please review the following PR diff:\n\n$DIFF" | jq -Rs .)
-#              }]
-#            }")
-#
-#          REVIEW=$(echo $RESPONSE | jq -r '.content[0].text')
-#          echo "review<<EOF" >> $GITHUB_OUTPUT
-#          echo "$REVIEW" >> $GITHUB_OUTPUT
-#          echo "EOF" >> $GITHUB_OUTPUT
-#
-#      - name: Post Review Comment
-#        env:
-#          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-#        run: |
-#          gh pr comment ${{ github.event.pull_request.number }} \
-#            --body "${{ steps.review.outputs.review }}"
+  inline-review:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get PR Diff
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr diff ${{ github.event.pull_request.number }} > pr.diff
+
+      - name: Get PR Commit SHA
+        id: sha
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          SHA=$(gh pr view ${{ github.event.pull_request.number }} --json headRefOid -q '.headRefOid')
+          echo "sha=$SHA" >> $GITHUB_OUTPUT
+
+      - name: Claude Inline Review
+        id: inline
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          RESPONSE=$(curl -s https://api.anthropic.com/v1/messages \
+            -H "x-api-key: $ANTHROPIC_API_KEY" \
+            -H "anthropic-version: 2023-06-01" \
+            -H "content-type: application/json" \
+            -d "{
+              \"model\": \"claude-sonnet-4-20250514\",
+              \"max_tokens\": 4096,
+              \"system\": \"You are a code reviewer. Analyze the diff and return ONLY a raw JSON array of inline comments. Do not wrap the response in markdown code fences. Return raw JSON only. Each object must have: path (file path), line (integer, the new line number in the diff), body (comment text). Only comment on Critical and Warning level issues. Example: [{\\\"path\\\": \\\"src/app.js\\\", \\\"line\\\": 42, \\\"body\\\": \\\"Potential null pointer here\\\"}]\",
+              \"messages\": [{
+                \"role\": \"user\",
+                \"content\": $(cat pr.diff | jq -Rs .)
+              }]
+            }")
+
+          COMMENTS=$(echo $RESPONSE | jq -r '.content[0].text')
+          echo "comments<<EOF" >> $GITHUB_OUTPUT
+          echo "$COMMENTS" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Post Inline Comments
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUMBER=${{ github.event.pull_request.number }}
+          SHA="${{ steps.sha.outputs.sha }}"
+
+          cat << 'ENDOFCOMMENTS' > comments.json
+          ${{ steps.inline.outputs.comments }}
+          ENDOFCOMMENTS
+
+          # Strip markdown code fences if present
+          CLEAN=$(cat comments.json | sed 's/```json//g' | sed 's/```//g' | tr -d '\r')
+
+          echo "$CLEAN" | jq -c '.[]' | while read comment; do
+            FILE=$(echo $comment | jq -r '.path')
+            LINE=$(echo $comment | jq -r '.line')
+            BODY=$(echo $comment | jq -r '.body')
+
+            curl -s -X POST \
+              -H "Authorization: token $GITHUB_TOKEN" \
+              -H "Accept: application/vnd.github.v3+json" \
+              https://api.github.com/repos/${{ github.repository }}/pulls/$PR_NUMBER/comments \
+              -d "{
+                \"body\": $(echo "$BODY" | jq -Rs .),
+                \"commit_id\": \"$SHA\",
+                \"path\": \"$FILE\",
+                \"line\": $LINE,
+                \"side\": \"RIGHT\"
+              }"
+          done
