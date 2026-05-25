@@ -1,0 +1,202 @@
+name: AI PR Fixer
+
+on:
+  workflow_run:
+    workflows: ["AI Code Review + Tests"]
+    types: [completed]
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Get PR number and branch
+        id: pr
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUMBER=$(gh api repos/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}/pulls \
+            --jq '.[0].number // empty')
+
+          if [ -z "$PR_NUMBER" ]; then
+            echo "No PR associated with this workflow run. Skipping."
+            exit 0
+          fi
+
+          BRANCH=$(gh pr view "$PR_NUMBER" --json headRefName -q '.headRefName')
+          echo "number=$PR_NUMBER" >> $GITHUB_OUTPUT
+          echo "branch=$BRANCH"    >> $GITHUB_OUTPUT
+
+      - uses: actions/checkout@v4
+        if: steps.pr.outputs.number != ''
+        with:
+          ref: ${{ steps.pr.outputs.branch }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Collect review comments
+        if: steps.pr.outputs.number != ''
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUMBER=${{ steps.pr.outputs.number }}
+
+          # Inline review comments posted by github-actions[bot]
+          gh api "repos/${{ github.repository }}/pulls/$PR_NUMBER/comments" \
+            --jq '[.[] | select(.user.login == "github-actions[bot]") | {path: .path, line: .line, body: .body}]' \
+            > inline_comments.json
+
+          # PR-level summary comments posted by github-actions[bot]
+          gh api "repos/${{ github.repository }}/issues/$PR_NUMBER/comments" \
+            --jq '[.[] | select(.user.login == "github-actions[bot]") | .body] | join("\n---\n")' \
+            > summary.txt
+
+          echo "Inline comments:"
+          cat inline_comments.json
+          echo "Summary comments:"
+          cat summary.txt
+
+      - name: Collect changed file contents
+        if: steps.pr.outputs.number != ''
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUMBER=${{ steps.pr.outputs.number }}
+
+          gh pr view "$PR_NUMBER" --json files -q '.files[].path' > changed_files.txt
+
+          FILE_CONTENTS="{}"
+          while IFS= read -r file; do
+            if [ -f "$file" ]; then
+              FILE_CONTENTS=$(echo "$FILE_CONTENTS" | jq --arg k "$file" --rawfile v "$file" '. + {($k): $v}')
+            fi
+          done < changed_files.txt
+
+          echo "$FILE_CONTENTS" > file_contents.json
+
+      - name: Build Claude payload
+        if: steps.pr.outputs.number != ''
+        run: |
+          jq -n \
+            --slurpfile inline  inline_comments.json \
+            --rawfile   summary summary.txt \
+            --slurpfile files   file_contents.json \
+            '{inline_comments: $inline[0], summary: $summary, files: $files[0]}' \
+            > payload.json
+
+      - name: Call Claude to generate fixes
+        if: steps.pr.outputs.number != ''
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          python3 - <<'PYEOF'
+          import json, sys, urllib.request, urllib.error
+
+          with open(".claude/skills/pr-fixer/SKILL.md") as f:
+              skill = f.read()
+          with open("payload.json") as f:
+              payload = json.load(f)
+
+          request_body = {
+              "model": "claude-sonnet-4-20250514",
+              "max_tokens": 8096,
+              "system": skill,
+              "messages": [{"role": "user", "content": json.dumps(payload)}]
+          }
+
+          import os
+          api_key = os.environ["ANTHROPIC_API_KEY"]
+          req = urllib.request.Request(
+              "https://api.anthropic.com/v1/messages",
+              data=json.dumps(request_body).encode(),
+              headers={
+                  "x-api-key": api_key,
+                  "anthropic-version": "2023-06-01",
+                  "content-type": "application/json",
+              },
+              method="POST"
+          )
+
+          with urllib.request.urlopen(req) as resp:
+              body = json.loads(resp.read())
+
+          text = body["content"][0]["text"].strip()
+
+          # Strip markdown fences if Claude wrapped the output
+          if text.startswith("```"):
+              lines = text.splitlines()
+              text = "\n".join(lines[1:-1])
+
+          with open("fixes.json", "w") as f:
+              f.write(text)
+
+          fixes = json.loads(text)
+          print(f"Claude returned fixes for {len(fixes)} file(s): {list(fixes.keys())}")
+          PYEOF
+
+      - name: Apply fixes and open PR
+        if: steps.pr.outputs.number != ''
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUMBER=${{ steps.pr.outputs.number }}
+          BASE_BRANCH=${{ steps.pr.outputs.branch }}
+          FIX_BRANCH="fix/pr-${PR_NUMBER}-review"
+
+          # Check if there are any fixes
+          FIX_COUNT=$(jq 'length' fixes.json)
+          if [ "$FIX_COUNT" -eq 0 ]; then
+            echo "No fixes needed — skipping PR creation."
+            exit 0
+          fi
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git"
+          git checkout -b "$FIX_BRANCH"
+
+          # Write each fixed file
+          python3 - <<'PYEOF'
+          import json, os
+
+          with open("fixes.json") as f:
+              fixes = json.load(f)
+
+          for path, content in fixes.items():
+              dir_name = os.path.dirname(path)
+              if dir_name:
+                  os.makedirs(dir_name, exist_ok=True)
+              with open(path, "w") as f:
+                  f.write(content)
+              print(f"  Applied fix: {path}")
+          PYEOF
+
+          git add -A
+
+          if git diff --cached --quiet; then
+            echo "No file changes after applying fixes — skipping PR creation."
+            exit 0
+          fi
+
+          git commit -m "fix: apply AI review suggestions for PR #${PR_NUMBER}"
+          git push origin "$FIX_BRANCH"
+
+          gh pr create \
+            --title "fix: AI review suggestions for PR #${PR_NUMBER}" \
+            --body "$(cat <<EOF
+          ## AI Review Fixes
+
+          Automated fixes generated from code review comments on PR #${PR_NUMBER}.
+
+          **Source:** inline comments + summary from the \`AI Code Review + Tests\` workflow.
+          **Scope:** Critical and Warning level issues only — Suggestions are not applied.
+
+          > Review the diff carefully before merging. AI-generated fixes should always be human-verified.
+          EOF
+          )" \
+            --base "$BASE_BRANCH" \
+            --head "$FIX_BRANCH"

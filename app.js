@@ -40,37 +40,48 @@ function headerGradient(color) {
   return pair || ['#1e1b4b','#312e81'];
 }
 
-let books = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-if (!books.length) {
-  const old = localStorage.getItem('books_data');
-  if (old) try { books = JSON.parse(old); } catch(e) {}
+class BooksStore {
+  #KEY = STORAGE_KEY;
+  #LEGACY_KEY = 'books_data';
+  #books = [];
+
+  constructor() {
+    this.#books = JSON.parse(localStorage.getItem(this.#KEY) || '[]');
+    if (!this.#books.length) {
+      const old = localStorage.getItem(this.#LEGACY_KEY);
+      if (old) try { this.#books = JSON.parse(old); } catch(e) {}
+    }
+  }
+
+  #persist() {
+    localStorage.setItem(this.#KEY, JSON.stringify(this.#books));
+  }
+
+  getAll()    { return this.#books; }
+  getById(id) { return this.#books.find(b => b.id === id) || null; }
+
+  create(data) {
+    const book = { id: crypto.randomUUID(), ...data };
+    this.#books.unshift(book);
+    this.#persist();
+    return book;
+  }
+
+  update(id, data) {
+    const idx = this.#books.findIndex(b => b.id === id);
+    if (idx === -1) return null;
+    this.#books[idx] = { ...this.#books[idx], ...data };
+    this.#persist();
+    return this.#books[idx];
+  }
+
+  remove(id) {
+    this.#books = this.#books.filter(b => b.id !== id);
+    this.#persist();
+  }
 }
 
-function persist() { localStorage.setItem(STORAGE_KEY, JSON.stringify(books)); }
-function getAll()    { return books; }
-function getById(id) {
-  return books.find(b => b.id === id) || null;
-}
-
-function create(data) {
-  const book = { id: crypto.randomUUID(), ...data };
-  books.unshift(book);
-  persist();
-  return book;
-}
-
-function update(id, data) {
-  const idx = books.findIndex(b => b.id === id);
-  if (idx === -1) return null;
-  books[idx] = { ...books[idx], ...data };
-  persist();
-  return books[idx];
-}
-
-function remove(id) {
-  books = books.filter(b => b.id !== id);
-  persist();
-}
+const store = new BooksStore();
 
 function esc(str) {
   return String(str ?? '')
@@ -85,7 +96,7 @@ function renderBooks(filter = '') {
   const empty   = document.getElementById('empty-state');
   const countEl = document.getElementById('book-count');
   const q       = filter.trim().toLowerCase();
-  const all     = getAll();
+  const all     = store.getAll();
   const list    = q
     ? all.filter(b => b.title.toLowerCase().includes(q) || b.author.toLowerCase().includes(q))
     : all;
@@ -145,7 +156,7 @@ function closeAll() {
 }
 
 function openDetail(id) {
-  const book = getById(id);
+  const book = store.getById(id);
   if (!book) return;
   activeBookId = id;
   const color    = genreColor(book.genre);
@@ -167,7 +178,7 @@ document.getElementById('detail-edit').addEventListener('click', () => {
 });
 
 function openConfirm(id) {
-  const book = getById(id);
+  const book = store.getById(id);
   if (!book) return;
   activeBookId = id;
   document.getElementById('confirm-book-title').textContent = book.title;
@@ -177,8 +188,8 @@ function openConfirm(id) {
 document.getElementById('detail-delete').addEventListener('click', () => openConfirm(activeBookId));
 
 document.getElementById('confirm-yes').addEventListener('click', () => {
-  const title = getById(activeBookId)?.title || 'Book';
-  remove(activeBookId);
+  const title = store.getById(activeBookId)?.title || 'Book';
+  store.remove(activeBookId);
   closeAll();
   renderBooks(document.getElementById('search').value);
   toast(`"${title}" deleted`, 'danger');
@@ -190,7 +201,7 @@ function openForm(id = null) {
   form.querySelectorAll('.error').forEach(el => el.classList.remove('error'));
   document.getElementById('form-id').value = '';
   if (id) {
-    const book = getById(id);
+    const book = store.getById(id);
     if (!book) return;
     document.getElementById('form-heading').textContent   = 'Edit Book';
     document.getElementById('form-submit').textContent    = 'Save Changes';
@@ -231,8 +242,8 @@ document.getElementById('book-form').addEventListener('submit', e => {
     description: document.getElementById('form-description').value.trim(),
   };
   const id = document.getElementById('form-id').value;
-  if (id) { update(id, data); toast(`"${data.title}" updated`, 'success'); }
-  else    { create(data);     toast(`"${data.title}" added`,   'success'); }
+  if (id) { store.update(id, data); toast(`"${data.title}" updated`, 'success'); }
+  else    { store.create(data);     toast(`"${data.title}" added`,   'success'); }
   closeModal('modal-form');
   renderBooks(document.getElementById('search').value);
 });
