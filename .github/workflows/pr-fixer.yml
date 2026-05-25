@@ -1,14 +1,6 @@
 name: AI PR Fixer
 
 on:
-  workflow_call:
-    inputs:
-      pr_number:
-        type: string
-        required: true
-    secrets:
-      ANTHROPIC_API_KEY:
-        required: true
   workflow_dispatch:
     inputs:
       pr_number:

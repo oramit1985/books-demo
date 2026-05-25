@@ -146,7 +146,14 @@ jobs:
   call-pr-fixer:
     needs: [code-review, inline-review]
     if: always()
-    uses: ./.github/workflows/pr-fixer.yml
-    with:
-      pr_number: "${{ github.event.pull_request.number }}"
-    secrets: inherit
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Trigger PR Fixer
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh workflow run pr-fixer.yml \
+            --repo ${{ github.repository }} \
+            -f pr_number=${{ github.event.pull_request.number }}
