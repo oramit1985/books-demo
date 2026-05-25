@@ -14,7 +14,6 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
-      workflows: write
 
     steps:
       - name: Get PR number and branch
@@ -69,7 +68,9 @@ jobs:
         run: |
           PR_NUMBER=${{ steps.pr.outputs.number }}
 
-          gh pr view "$PR_NUMBER" --json files -q '.files[].path' > changed_files.txt
+          # Exclude workflow files — automated fixes to .github/ require human review
+          gh pr view "$PR_NUMBER" --json files -q '.files[].path' \
+            | grep -v '^\.github/' > changed_files.txt || true
 
           FILE_CONTENTS="{}"
           while IFS= read -r file; do
