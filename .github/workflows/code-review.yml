@@ -137,7 +137,7 @@ jobs:
             -d "{
               \"model\": \"claude-sonnet-4-20250514\",
               \"max_tokens\": 4096,
-              \"system\": \"You are a code reviewer. Analyze the diff and return ONLY a JSON array of inline comments, no other text. Each object must have: path (file path), line (integer, the new line number in the diff), body (comment text). Only comment on Critical and Warning level issues. Example: [{\\\"path\\\": \\\"src/app.js\\\", \\\"line\\\": 42, \\\"body\\\": \\\"Potential null pointer here\\\"}]\",
+              \"system\": \"You are a code reviewer. Analyze the diff and return ONLY a raw JSON array of inline comments. Do not wrap the response in markdown code fences. Return raw JSON only. Each object must have: path (file path), line (integer, the new line number in the diff), body (comment text). Only comment on Critical and Warning level issues. Example: [{\\\"path\\\": \\\"src/app.js\\\", \\\"line\\\": 42, \\\"body\\\": \\\"Potential null pointer here\\\"}]\",
               \"messages\": [{
                 \"role\": \"user\",
                 \"content\": $(cat pr.diff | jq -Rs .)
@@ -157,7 +157,10 @@ jobs:
           PR_NUMBER=${{ github.event.pull_request.number }}
           SHA="${{ steps.sha.outputs.sha }}"
 
-          echo "$COMMENTS" | jq -c '.[]' | while read comment; do
+          # Strip markdown code fences if present
+          CLEAN=$(echo "$COMMENTS" | sed 's/```json//g' | sed 's/```//g' | tr -d '\r')
+
+          echo "$CLEAN" | jq -c '.[]' | while read comment; do
             FILE=$(echo $comment | jq -r '.path')
             LINE=$(echo $comment | jq -r '.line')
             BODY=$(echo $comment | jq -r '.body')
