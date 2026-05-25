@@ -100,7 +100,7 @@ jobs:
           echo "$COMMENTS" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-      - name: Delete previous bot inline comments
+      - name: Clear previous bot inline comments
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -143,4 +143,10 @@ jobs:
               }"
           done
 
-
+  call-pr-fixer:
+    needs: [code-review, inline-review]
+    if: always()
+    uses: ./.github/workflows/pr-fixer.yml
+    with:
+      pr_number: "${{ github.event.pull_request.number }}"
+    secrets: inherit
